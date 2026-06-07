@@ -2,6 +2,12 @@ import psutil
 # psutil nos da acceso a métricas del sistema que Python no expone por defecto.
 import platform
 # platform lo usamos para detectar el SO y adaptar el comportamiento del script.
+import socket
+# socket permite obtener información de red y comunicarnos mediante protocolos
+# como TCP/IP sin depender de herramientas externas.
+import subprocess
+# subprocess permite ejecutar comandos del sistema operativo desde Python
+# y capturar su resultado para procesarlo dentro del programa.
 
 # --- Recursos del sistema ---
 
@@ -84,3 +90,95 @@ def get_disk_info():
         # o cualquier otro problema, devolvemos el error para facilitar
         # el diagnóstico sin romper el script.
         return {"error": str(e)}
+
+# --- Red y procesos ---
+
+def get_network_info():
+    try:
+        net = psutil.net_io_counters()
+        # net_io_counters() devuelve estadísticas acumuladas de tráfico de red
+        # desde que el sistema fue iniciado. Incluye bytes enviados, recibidos
+        # y otros contadores útiles para monitorear actividad de red.
+
+        hostname = socket.gethostname()
+        # gethostname() obtiene el nombre que identifica al equipo dentro de la red.
+        # No necesariamente coincide con el nombre visible para el usuario,
+        # sino con el que el sistema operativo tiene registrado.
+
+        ip = socket.gethostbyname(hostname)
+        # Devuelve la IP asociada al hostname del equipo.
+        # En sistemas con múltiples interfaces puede no reflejar la IP correcta.
+        # Una mejora posible sería usar psutil.net_if_addrs() para mayor precisión.
+
+        latency = subprocess.run(
+            ["ping", "-n", "1", "8.8.8.8"] if platform.system() == "Windows" else ["ping", "-c", "1", "8.8.8.8"],
+            capture_output=True, text=True
+        )
+        # Ejecutamos un único ping a 8.8.8.8 para verificar conectividad.
+        # Se elige esa dirección porque pertenece a los DNS públicos de Google
+        # y suele estar disponible desde prácticamente cualquier conexión a Internet.
+        # El parámetro cambia según el sistema operativo:
+        # "-n" en Windows y "-c" en Linux/macOS indican la cantidad de paquetes a enviar.
+        # capture_output=True evita que la salida aparezca en consola
+        # y text=True devuelve la respuesta como texto en lugar de bytes.
+
+        return {
+            "ip": ip,
+
+            "bytes_sent_mb": round(net.bytes_sent / (1024**2), 2),
+            # bytes_sent representa todo el tráfico enviado desde que inició el sistema.
+            # Convertimos a megabytes para que el valor sea más fácil de interpretar
+            # que una cifra grande expresada en bytes.
+
+            "bytes_recv_mb": round(net.bytes_recv / (1024**2), 2),
+            # bytes_recv sigue la misma lógica pero para el tráfico recibido.
+            # Al mostrarlos juntos podemos tener una idea rápida del uso de red.
+
+            "connected": latency.returncode == 0
+            # subprocess devuelve un código de salida al finalizar.
+            # Un returncode igual a 0 indica que el ping se ejecutó correctamente
+            # y que hubo respuesta desde el destino, lo que usamos como indicador
+            # simple de conectividad externa.
+        }
+    except Exception as e:
+        # Ante errores de resolución DNS, permisos o problemas al ejecutar
+        # el comando del sistema, devuelve el detalle para facilitar el diagnóstico.
+        return {"error": str(e)}
+
+
+def get_top_processes(limit=5):
+    try:
+        processes = []
+
+        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+            # process_iter() permite recorrer los procesos activos del sistema.
+            # Indicamos explícitamente los atributos que necesitamos para evitar
+            # consultas innecesarias y reducir el costo de obtener la información.
+
+            try:
+                processes.append(proc.info)
+                # proc.info devuelve un diccionario con los campos solicitados.
+                # Guardamos cada proceso en una lista para poder ordenarlos después
+                # según el criterio que nos interese.
+
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                # Un proceso puede finalizar mientras lo estamos recorriendo,
+                # o el sistema puede negar acceso a determinada información.
+                # En esos casos simplemente lo ignoramos y continuamos con el siguiente.
+                pass
+
+        return sorted(
+            processes,
+            key=lambda x: x['cpu_percent'],
+            reverse=True
+        )[:limit]
+        # sorted() ordena los procesos según el porcentaje de CPU consumido.
+        # reverse=True hace que los procesos con mayor uso aparezcan primero.
+        # Finalmente usamos slicing para devolver únicamente la cantidad solicitada
+        # mediante el parámetro limit.
+
+    except Exception as e:
+        # Si ocurre algún error inesperado durante la recolección u ordenamiento
+        # de procesos, devolvemos el detalle sin interrumpir el programa principal.
+        return {"error": str(e)}
+
