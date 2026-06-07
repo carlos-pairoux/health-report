@@ -8,6 +8,9 @@ import socket
 import subprocess
 # subprocess permite ejecutar comandos del sistema operativo desde Python
 # y capturar su resultado para procesarlo dentro del programa.
+import time
+# time permite trabajar con marcas temporales del sistema.
+# En este caso se usa para calcular cuánto tiempo lleva encendido el equipo.
 
 # --- Recursos del sistema ---
 
@@ -180,5 +183,88 @@ def get_top_processes(limit=5):
     except Exception as e:
         # Si ocurre algún error inesperado durante la recolección u ordenamiento
         # de procesos, devolvemos el detalle sin interrumpir el programa principal.
+        return {"error": str(e)}
+
+# --- Estado del sistema ---
+
+def get_system_alerts():
+    try:
+        alerts = []
+
+        cpu = psutil.cpu_percent(interval=1)
+        # Se obtiene una muestra de uso de CPU durante un segundo.
+        # Se usa interval=1 que produce una medición más representativa
+        # que una lectura instantánea sin referencia.
+
+        ram = psutil.virtual_memory()
+        # Se asigna el estado actual de la memoria RAM a la variable ram.
+        # Este objeto incluye métricas como memoria disponible,
+        # utilizada y porcentaje total de ocupación.
+
+        disk = psutil.disk_usage("/") if platform.system() != "Windows" else psutil.disk_usage("C:\\")
+        # Consultamos la partición principal del sistema.
+        # La ruta cambia según el sistema operativo para mantener
+        # compatibilidad entre Windows, Linux y macOS.
+
+        if cpu > 80:
+            alerts.append(f"CPU usage high: {cpu}%")
+        # Un uso sostenido por encima del 80% suele indicar
+        # que el procesador está trabajando cerca de su capacidad.
+        # No necesariamente es un problema, pero puede afectar
+        # el rendimiento general del sistema.
+
+        if ram.percent > 80:
+            alerts.append(f"RAM usage high: {ram.percent}%")
+        # Cuando la RAM disponible comienza a escasear,
+        # el sistema puede recurrir con más frecuencia a memoria virtual,
+        # lo que normalmente implica una pérdida de rendimiento.
+
+        if disk.percent > 80:
+            alerts.append(f"Disk usage high: {disk.percent}%")
+        # Un nivel alto de ocupación puede generar problemas
+        # para almacenar archivos temporales, actualizaciones
+        # o procesos que necesiten espacio libre para operar.
+
+        return alerts if alerts else ["No alerts"]
+        # Si se detectó al menos una condición de riesgo,
+        # devolvemos la lista de alertas generadas.
+        # En caso contrario devolvemos un mensaje indicando
+        # que no se encontraron situaciones relevantes.
+
+    except Exception as e:
+        # Ante cualquier error de acceso a métricas del sistema,
+        # devolvemos el detalle para facilitar el diagnóstico
+        # sin interrumpir la ejecución del programa.
+        return {"error": str(e)}
+
+
+def get_uptime():
+    try:
+        boot_time = psutil.boot_time()
+        # boot_time() guarda el momento exacto en que el sistema arrancó.
+        # Lo usamos como punto de partida para calcular el tiempo transcurrido.
+
+        uptime_seconds = time.time() - boot_time
+        # time.time() devuelve el timestamp actual.
+        # Restando el momento de arranque obtenemos cuánto tiempo
+        # lleva encendido el sistema en segundos.
+
+        hours = int(uptime_seconds // 3600)
+        # Dividimos por 3600 porque una hora contiene 3600 segundos.
+        # Usamos división entera (//) para quedarnos únicamente con las horas completas.
+
+        minutes = int((uptime_seconds % 3600) // 60)
+        # Primero obtenemos los segundos restantes después de extraer las horas.
+        # Luego los convertimos a minutos para mostrar un resultado más legible.
+
+        return {
+            "hours": hours,
+            "minutes": minutes
+        }
+
+    except Exception as e:
+        # Si ocurre algún problema al obtener la hora de arranque
+        # o realizar los cálculos, devolvemos el error para que
+        # pueda ser gestionado por quien llame a la función.
         return {"error": str(e)}
 
