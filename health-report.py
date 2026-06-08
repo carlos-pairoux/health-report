@@ -268,3 +268,81 @@ def get_uptime():
         # pueda ser gestionado por quien llame a la función.
         return {"error": str(e)}
 
+# --- Generador de reporte ---
+
+def generate_report():
+    report = {
+        "cpu": get_cpu_info(),
+        # Reutilizamos la función específica de CPU en lugar de consultar
+        # directamente los datos acá. Esto mantiene separadas las responsabilidades
+        # y facilita modificar cada módulo sin afectar el resto del reporte.
+
+        "ram": get_ram_info(),
+        # Se obtiene el estado actual de la memoria utilizando la función
+        # dedicada a esa tarea para mantener una estructura consistente.
+
+        "disk": get_disk_info(),
+        # Centralizar la lógica de disco en una única función evita duplicación
+        # de código y simplifica futuras mejoras o correcciones.
+
+        "network": get_network_info(),
+        # Agrupamos toda la información de red bajo una misma sección
+        # para que el reporte tenga una organización clara.
+
+        "top_processes": get_top_processes(),
+        # Incluimos los procesos con mayor consumo de CPU porque suelen ser
+        # los primeros candidatos a revisar cuando hay problemas de rendimiento.
+
+        "alerts": get_system_alerts(),
+        # Las alertas resumen situaciones que requieren atención inmediata.
+        # Esto evita que el usuario tenga que interpretar todas las métricas manualmente.
+
+        "uptime": get_uptime()
+        # El tiempo de actividad aporta contexto sobre el estado general del sistema.
+        # Por ejemplo, puede ayudar a identificar equipos que llevan mucho tiempo sin reiniciarse.
+    }
+
+    return report
+    # Devolvemos un único diccionario con toda la información consolidada.
+    # Esto hace más sencillo consumir el reporte desde consola, una API
+    # o cualquier otra interfaz en el futuro.
+
+
+def main():
+    report = generate_report()
+    # Generamos el reporte completo una sola vez y trabajamos sobre esa copia.
+    # Así evitamos volver a consultar métricas que podrían cambiar entre lecturas.
+
+    for section, data in report.items():
+        # Recorremos cada sección del reporte de forma genérica.
+        # De esta manera, si se agregan nuevas categorías en el futuro,
+        # no hace falta modificar la lógica de impresión.
+
+        print(f"\n--- {section.upper()} ---")
+        # upper() se usa únicamente para mejorar la presentación visual
+        # y diferenciar claramente cada bloque de información.
+
+        if isinstance(data, dict):
+            # Los diccionarios representan conjuntos de métricas clave-valor,
+            # por lo que recorremos cada elemento individualmente.
+
+            for key, value in data.items():
+                print(f"  {key}: {value}")
+
+        elif isinstance(data, list):
+            # Las listas se usan para elementos repetibles como alertas
+            # o colecciones de resultados, por eso imprimimos cada entrada
+            # en una línea separada.
+
+            for item in data:
+                print(f"  {item}")
+
+# --- Punto de entrada ---
+
+if __name__ == "__main__":
+    # Esta condición garantiza que main() se ejecute solamente cuando
+    # el archivo se lanza directamente y no cuando es importado como módulo.
+    # Es una práctica habitual para separar lo que es el código reutilizable
+    # del punto de entrada principal de la aplicación.
+
+    main()
